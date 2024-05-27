@@ -25,10 +25,11 @@ namespace APBDTask8.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Client>>> GetClients()
         {
-          if (_context.Clients == null)
-          {
-              return NotFound();
-          }
+            if (_context.Clients == null)
+            {
+                return NotFound();
+            }
+
             return await _context.Clients.ToListAsync();
         }
 
@@ -36,10 +37,11 @@ namespace APBDTask8.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<Client>> GetClient(int id)
         {
-          if (_context.Clients == null)
-          {
-              return NotFound();
-          }
+            if (_context.Clients == null)
+            {
+                return NotFound();
+            }
+
             var client = await _context.Clients.FindAsync(id);
 
             if (client == null)
@@ -86,10 +88,11 @@ namespace APBDTask8.Controllers
         [HttpPost]
         public async Task<ActionResult<Client>> PostClient(Client client)
         {
-          if (_context.Clients == null)
-          {
-              return Problem("Entity set 'maksousDbContext.Clients'  is null.");
-          }
+            if (_context.Clients == null)
+            {
+                return Problem("Entity set 'maksousDbContext.Clients'  is null.");
+            }
+
             _context.Clients.Add(client);
             await _context.SaveChangesAsync();
 
@@ -104,6 +107,7 @@ namespace APBDTask8.Controllers
             {
                 return NotFound();
             }
+
             var client = await _context.Clients.FindAsync(id);
             if (client == null)
             {
@@ -119,6 +123,82 @@ namespace APBDTask8.Controllers
         private bool ClientExists(int id)
         {
             return (_context.Clients?.Any(e => e.IdClient == id)).GetValueOrDefault();
+        }
+    }
+
+    [Route("api/[controller]")]
+    [ApiController]
+    public class TripsController : ControllerBase
+    {
+        private readonly maksousDbContext _context;
+
+        public TripsController(maksousDbContext context)
+        {
+            _context = context;
+        }
+
+        // GET: api/Trips
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Trip>>> GetTrips(int page = 1, int pageSize = 10)
+        {
+            var trips = await _context.Trips
+                .OrderByDescending(t => t.DateFrom)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Include(t => t.IdCountries)
+                .Include(t => t.ClientTrips)
+                .ThenInclude(ct => ct.IdClientNavigation)
+                .ToListAsync();
+
+            var totalTrips = await _context.Trips.CountAsync();
+            var totalPages = (int)Math.Ceiling((double)totalTrips / pageSize);
+
+            return Ok(new
+            {
+                pageNum = page,
+                pageSize,
+                allPages = totalPages,
+                trips
+            });
+        }
+
+        // POST: api/Trips/{idTrip}/clients
+        [HttpPost("{idTrip}/clients")]
+        public async Task<IActionResult> AssignClientToTrip(int idTrip, [FromBody] Client clientData)
+        {
+            var existingClient = await _context.Clients.FirstOrDefaultAsync(c => c.Pesel == clientData.Pesel);
+            if (existingClient != null)
+            {
+                return BadRequest("Client with the given PESEL already exists.");
+            }
+
+            var trip = await _context.Trips.FindAsync(idTrip);
+            if (trip == null || trip.DateFrom < DateTime.Now)
+            {
+                return BadRequest("Invalid trip or trip has already occurred.");
+            }
+
+            var client = new Client
+            {
+                FirstName = clientData.FirstName,
+                LastName = clientData.LastName,
+                Email = clientData.Email,
+                Telephone = clientData.Telephone,
+                Pesel = clientData.Pesel
+            };
+
+            var clientTrip = new ClientTrip
+            {
+                IdClientNavigation = client,
+                IdTripNavigation = trip,
+                RegisteredAt = DateTime.Now
+            };
+
+            _context.Clients.Add(client);
+            _context.ClientTrips.Add(clientTrip);
+
+            await _context.SaveChangesAsync();
+            return CreatedAtAction("GetTrips", new { id = client.IdClient }, client);
         }
     }
 }
