@@ -137,34 +137,10 @@ namespace APBDTask8.Controllers
             _context = context;
         }
 
-        // GET: api/Trips
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Trip>>> GetTrips(int page = 1, int pageSize = 10)
-        {
-            var trips = await _context.Trips
-                .OrderByDescending(t => t.DateFrom)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Include(t => t.IdCountries)
-                .Include(t => t.ClientTrips)
-                .ThenInclude(ct => ct.IdClientNavigation)
-                .ToListAsync();
-
-            var totalTrips = await _context.Trips.CountAsync();
-            var totalPages = (int)Math.Ceiling((double)totalTrips / pageSize);
-
-            return Ok(new
-            {
-                pageNum = page,
-                pageSize,
-                allPages = totalPages,
-                trips
-            });
-        }
-
+       
         // POST: api/Trips/{idTrip}/clients
         [HttpPost("{idTrip}/clients")]
-        public async Task<IActionResult> AssignClientToTrip(int idTrip, [FromBody] Client clientData)
+        public async Task<IActionResult> AssignClientToTrip(int idTrip, [FromBody] AssignClientToTripDto clientData)
         {
             var existingClient = await _context.Clients.FirstOrDefaultAsync(c => c.Pesel == clientData.Pesel);
             if (existingClient != null)
@@ -200,5 +176,88 @@ namespace APBDTask8.Controllers
             await _context.SaveChangesAsync();
             return CreatedAtAction("GetTrips", new { id = client.IdClient }, client);
         }
+        // GET: api/Trips
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<TripDto>>> GetTrips(int page = 1, int pageSize = 10)
+        {
+            var trips = await _context.Trips
+                .OrderByDescending(t => t.DateFrom)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Include(t => t.IdCountries)
+                .Include(t => t.ClientTrips)
+                .ThenInclude(ct => ct.IdClientNavigation)
+                .Select(t => new TripDto
+                {
+                    IdTrip = t.IdTrip,
+                    Name = t.Name,
+                    Description = t.Description,
+                    DateFrom = t.DateFrom,
+                    DateTo = t.DateTo,
+                    MaxPeople = t.MaxPeople,
+                    Countries = t.IdCountries.Select(c => new CountryDto { IdCountry = c.IdCountry, Name = c.Name }).ToList(),
+                    Clients = t.ClientTrips.Select(ct => new ClientDto
+                    {
+                        IdClient = ct.IdClientNavigation.IdClient,
+                        FirstName = ct.IdClientNavigation.FirstName,
+                        LastName = ct.IdClientNavigation.LastName,
+                        Email = ct.IdClientNavigation.Email,
+                        Telephone = ct.IdClientNavigation.Telephone,
+                        Pesel = ct.IdClientNavigation.Pesel
+                    }).ToList()
+                })
+                .ToListAsync();
+
+            var totalTrips = await _context.Trips.CountAsync();
+            var totalPages = (int)Math.Ceiling((double)totalTrips / pageSize);
+
+            return Ok(new
+            {
+                pageNum = page,
+                pageSize,
+                allPages = totalPages,
+                trips
+            });
+        }
+
     }
+    
+    public class TripDto
+    {
+        public int IdTrip { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public DateTime DateFrom { get; set; }
+        public DateTime DateTo { get; set; }
+        public int MaxPeople { get; set; }
+        public List<CountryDto> Countries { get; set; }
+        public List<ClientDto> Clients { get; set; }
+    }
+
+    public class ClientDto
+    {
+        public int IdClient { get; set; }
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
+        public string Email { get; set; }
+        public string Telephone { get; set; }
+        public string Pesel { get; set; }
+    }
+
+    public class CountryDto
+    {
+        public int IdCountry { get; set; }
+        public string Name { get; set; }
+    }
+
+    public class AssignClientToTripDto
+    {
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
+        public string Email { get; set; }
+        public string Telephone { get; set; }
+        public string Pesel { get; set; }
+        public int IdTrip { get; set; }
+    }
+
 }
